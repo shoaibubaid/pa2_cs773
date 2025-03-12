@@ -1,0 +1,192 @@
+#include "cache.h"
+#define PREF_CLASS_MASK 0xF00 //0x1E000	//Neelu: IPCP pref class
+#define NUM_OF_STRIDE_BITS 8 
+
+// initialize replacement state
+void CACHE::llc_initialize_replacement()
+{
+	cout << NAME << " has LRU replacement policy %d" << NUM_CPUS << endl;
+}
+
+// find replacement victim
+uint32_t CACHE::llc_find_victim(uint32_t cpu, uint64_t instr_id, uint32_t set, const BLOCK *current_set, uint64_t ip, uint64_t full_addr, uint32_t type)
+{
+    uint32_t way = cpu*NUM_WAY/NUM_CPUS;
+    uint32_t end = way+NUM_WAY/NUM_CPUS;
+
+    // fill invalid line first
+    for (; way<end; way++) {
+        if (block[set][way].valid == false) {
+
+            DP ( if (warmup_complete[cpu]) {
+            cout << "[" << NAME << "] " << __func__ << " instr_id: " << instr_id << " invalid set: " << set << " way: " << way;
+            cout << hex << " address: " << (full_addr>>LOG2_BLOCK_SIZE) << " victim address: " << block[set][way].address << " data: " << block[set][way].data;
+            cout << dec << " lru: " << block[set][way].lru << endl; });
+
+            break;
+        }
+    }
+
+    // LRU victim
+    if (way == end) {
+        for (way = cpu*NUM_WAY/NUM_CPUS; way<end; way++) {
+            if (block[set][way].lru == end-1) {
+
+                DP ( if (warmup_complete[cpu]) {
+                cout << "[" << NAME << "] " << __func__ << " instr_id: " << instr_id << " replace set: " << set << " way: " << way;
+                cout << hex << " address: " << (full_addr>>LOG2_BLOCK_SIZE) << " victim address: " << block[set][way].address << " data: " << block[set][way].data;
+                cout << dec << " lru: " << block[set][way].lru << endl; });
+
+                break;
+            }
+        }
+    }
+
+    if (way == end) {
+        cerr << "[" << NAME << "] " << __func__ << " no victim! set: " << set << endl;
+        assert(0);
+    }
+
+    return way;
+}
+
+// called on every cache hit and cache fill
+void CACHE::llc_update_replacement_state(uint32_t cpu, uint32_t set, uint32_t way, uint64_t full_addr, uint64_t ip, uint64_t victim_addr, uint32_t type, uint8_t hit)
+{
+
+    if ((type == WRITEBACK) && ip)
+        assert(0);
+
+    // uncomment this line to see the LLC accesses
+    // cout << "CPU: " << cpu << "  LLC " << setw(9) << TYPE_NAME << " set: " << setw(5) << set << " way: " << setw(2) << way;
+    // cout << hex << " paddr: " << setw(12) << paddr << " ip: " << setw(8) << ip << " victim_addr: " << victim_addr << dec << endl;
+
+    // baseline LRU
+    if (hit && (type == WRITEBACK)) // writeback hit does not update LRU state
+        return;
+
+     uint32_t end = cpu*NUM_WAY/NUM_CPUS+NUM_WAY/NUM_CPUS;
+    for (uint32_t i=cpu*NUM_WAY/NUM_CPUS; i<end; i++) {
+        if (block[set][i].lru < block[set][way].lru) {
+            block[set][i].lru++;
+        }
+    }
+    block[set][way].lru = 0; // promote to the MRU position
+
+    return;
+}
+
+void CACHE::llc_replacement_final_stats()
+{
+
+}
+
+void CACHE::fill_cache(uint32_t set, uint32_t way, PACKET *packet)
+{  set=cpu*NUM_SET/NUM_CPUS + set%(NUM_SET/NUM_CPUS);
+#ifdef SANITY_CHECK
+#ifdef PUSH_DTLB_PB
+            if(cache_type == IS_DTLB_PB) {
+                if(packet->data == 0)
+                {
+                    cout << "Inside DTLB_PB, current = " << current_core_cycle[cpu] << " instr_id = " << packet->instr_id << endl;
+                    assert(0);
+                }
+            }
+#endif
+            if (cache_type == IS_ITLB) {
+                if (packet->data == 0)
+                {
+                    cout << "current = " << current_core_cycle[cpu] << " instr_id = "<< packet->instr_id << endl;
+                    assert(0);
+                }
+            }
+
+            if (cache_type == IS_DTLB) {
+                if (packet->data == 0)
+                {
+                    cout << "current = " << current_core_cycle[cpu] << " instr_id = "<< packet->instr_id << endl;
+                    assert(0);
+                }
+            }
+
+            if (cache_type == IS_STLB) {
+                if (packet->data == 0)
+                    assert(0);
+            }
+
+            if (cache_type == IS_PSCL5) {
+                if (packet->data == 0)
+                    assert(0);
+            }
+
+            if (cache_type == IS_PSCL4) {
+                if (packet->data == 0)
+                    assert(0);
+            }
+
+             if (cache_type == IS_PSCL3) {
+                if (packet->data == 0)
+                    assert(0);
+            }
+            if (cache_type == IS_PSCL2) {
+                if (packet->data == 0)
+                    assert(0);
+            }
+#endif
+            if (block[set][way].prefetch && (block[set][way].used == 0))
+                pf_useless++;
+
+            if (block[set][way].valid == 0)
+                block[set][way].valid = 1;
+            block[set][way].dirty = 0;
+            block[set][way].prefetch = (packet->type == PREFETCH || packet->type == PREFETCH_TRANSLATION || packet->type == TRANSLATION_FROM_L1D) ? 1 : 0;
+            block[set][way].used = 0;
+
+            //Neelu: Setting instruction and translation fields in L2C
+            if(cache_type == IS_L2C)
+            {	
+                if(packet->type == PREFETCH_TRANSLATION || packet->type == TRANSLATION_FROM_L1D || packet->type == LOAD_TRANSLATION)
+                    block[set][way].translation = 1;
+                else
+                    block[set][way].translation = 0;
+                if((packet->type == LOAD || packet->type == PREFETCH) && packet->instruction)
+                    block[set][way].instruction = 1;
+                else
+                    block[set][way].instruction = 0;
+            }
+
+            //Neelu: setting IPCP prefetch class
+            block[set][way].pref_class = ((packet->pf_metadata & PREF_CLASS_MASK) >> NUM_OF_STRIDE_BITS);
+
+            if (block[set][way].prefetch) 
+            {
+                pf_fill++;
+
+                //Neelu: IPCP prefetch stats
+                if(cache_type == IS_L1D)
+                {
+                    if(block[set][way].pref_class < 5)						                     
+                    {
+                        pref_filled[cpu][block[set][way].pref_class]++;
+                    }
+                }
+            }
+
+            block[set][way].delta = packet->delta;
+            block[set][way].depth = packet->depth;
+            block[set][way].signature = packet->signature;
+            block[set][way].confidence = packet->confidence;
+
+            block[set][way].tag = packet->address; //@Vishal: packet->address will be physical address for L1I, as it is only filled on a miss.
+            block[set][way].address = packet->address;
+            block[set][way].full_addr = packet->full_addr;
+            block[set][way].data = packet->data;
+            block[set][way].cpu = packet->cpu;
+            block[set][way].instr_id = packet->instr_id;
+
+            DP ( if (warmup_complete[packet->cpu] ) {
+                    cout << "[" << NAME << "] " << __func__ << " set: " << set << " way: " << way;
+                    cout << " lru: " << block[set][way].lru << " tag: " << hex << block[set][way].tag << " full_addr: " << block[set][way].full_addr;
+                    cout << " data: " << block[set][way].data << dec << endl; });
+        }
+
