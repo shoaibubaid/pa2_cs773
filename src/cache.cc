@@ -52,7 +52,14 @@ void CACHE::handle_fill()
         uint32_t mshr_index = MSHR.next_fill_index;
 
         // find victim
-        uint32_t set = get_set(MSHR.entry[mshr_index].address), way;
+        uint32_t set,way ;
+        
+        if(cache_type==IS_LLC && (replacement_type==4 || replacement_type==5))
+        set=get_set_llc(MSHR.entry[mshr_index].address,fill_cpu);
+        else
+        set = get_set(MSHR.entry[mshr_index].address);
+        
+        
         way = (this->*find_victim)(fill_cpu, MSHR.entry[mshr_index].instr_id, set, block[set], MSHR.entry[mshr_index].ip, MSHR.entry[mshr_index].full_addr, MSHR.entry[mshr_index].type);
 
 
@@ -762,8 +769,16 @@ if (writeback_cpu == NUM_CPUS)
         int index = WQ.head;
 
         // access cache
-        uint32_t set = get_set(WQ.entry[index].address);
-        int way = check_hit(&WQ.entry[index]);
+        uint32_t set,way ;
+        
+        if(cache_type==IS_LLC && (replacement_type==4||replacement_type==5))
+        set = get_set_llc(WQ.entry[index].address,writeback_cpu);
+        else
+        set = get_set(WQ.entry[index].address);
+        if(cache_type==IS_LLC && (replacement_type==4 || replacement_type==3 ))
+        way = check_hit_cpu(&WQ.entry[index],writeback_cpu);
+       else
+        way = check_hit(&WQ.entry[index]);
 
         //Neelu: For Ideal Critical IP Prefetcher
         /*if(cache_type == IS_L1D)
@@ -972,7 +987,12 @@ if (writeback_cpu == NUM_CPUS)
             }
             else {
                 // find victim
-                uint32_t set = get_set(WQ.entry[index].address), way;
+               uint32_t set,way ;
+        
+        if(cache_type==IS_LLC && (replacement_type==4||replacement_type==5))
+            set=get_set_llc(WQ.entry[index].address,writeback_cpu);
+        else
+            set = get_set(WQ.entry[index].address);
                 way = (this->*find_victim)(writeback_cpu, WQ.entry[index].instr_id, set, block[set], WQ.entry[index].ip, WQ.entry[index].full_addr, WQ.entry[index].type);
 
 #ifdef LLC_BYPASS
@@ -1466,8 +1486,18 @@ if((cache_type == IS_L1I || cache_type == IS_L1D) && reads_ready.size() == 0)
             int index = RQ.head;
 
             // access cache
-            uint32_t set = get_set(RQ.entry[index].address);
-            int way = check_hit(&RQ.entry[index]);
+         
+
+             uint32_t set,way ;
+        
+        if(cache_type==IS_LLC && (replacement_type==4 || replacement_type==5))
+        set = get_set_llc(RQ.entry[index].address,read_cpu);
+        else
+        set = get_set(RQ.entry[index].address);
+        if(cache_type==IS_LLC && (replacement_type==4 || replacement_type==3))
+        way = check_hit_cpu(&RQ.entry[index],read_cpu);
+       else
+        way = check_hit(&RQ.entry[index]);
 
 
             //Neelu: For Ideal Critical IP Prefetcher
@@ -2443,9 +2473,17 @@ if((cache_type == IS_L1I || cache_type == IS_L1D) && reads_ready.size() == 0)
                     }
 
                     // access cache
-                    uint32_t set = get_set(PQ.entry[index].address);
-                    int way = check_hit(&PQ.entry[index]);
+                    uint32_t set,way;
+                    
 
+                    if(cache_type==IS_LLC && (replacement_type==4 || replacement_type==5))
+        set = get_set_llc(PQ.entry[index].address,prefetch_cpu);
+        else
+        set = get_set(PQ.entry[index].address);
+        if(cache_type==IS_LLC && (replacement_type==4 || replacement_type==3))
+        way = check_hit_cpu(&PQ.entry[index],prefetch_cpu);
+       else
+        way = check_hit(&PQ.entry[index]);
                     if (way >= 0) { // prefetch hit
 
                         // update replacement policy
@@ -2846,6 +2884,18 @@ if((cache_type == IS_L1I || cache_type == IS_L1D) && reads_ready.size() == 0)
                 return (uint32_t) (address & ((1 << lg2(NUM_SET)) - 1)); 
         }
 
+         uint32_t CACHE::get_set_llc(uint64_t address,uint8_t cpu)
+        {
+#ifdef PUSH_DTLB_PB
+            if(cache_type == IS_DTLB_PB)
+                return 0;
+
+            else
+#endif
+                uint32_t set= (address & ((1 << lg2(NUM_SET)) - 1)); 
+                return  cpu*NUM_SET/NUM_CPUS + set%(NUM_SET/NUM_CPUS);
+        }
+
         uint32_t CACHE::get_way(uint64_t address, uint32_t set)
         {
             for (uint32_t way=0; way<NUM_WAY; way++) {
@@ -2856,8 +2906,9 @@ if((cache_type == IS_L1I || cache_type == IS_L1D) && reads_ready.size() == 0)
             return NUM_WAY;
         }
 
-        /*void CACHE::fill_cache(uint32_t set, uint32_t way, PACKET *packet)
-        {
+        void CACHE::fill_cache(uint32_t set, uint32_t way, PACKET *packet)
+{  /*if(cache_type==IS_LLC && replacement_type==4)
+    set=cpu*NUM_SET/NUM_CPUS + set%(NUM_SET/NUM_CPUS);*/
 #ifdef SANITY_CHECK
 #ifdef PUSH_DTLB_PB
             if(cache_type == IS_DTLB_PB) {
@@ -2964,7 +3015,8 @@ if((cache_type == IS_L1I || cache_type == IS_L1D) && reads_ready.size() == 0)
                     cout << "[" << NAME << "] " << __func__ << " set: " << set << " way: " << way;
                     cout << " lru: " << block[set][way].lru << " tag: " << hex << block[set][way].tag << " full_addr: " << block[set][way].full_addr;
                     cout << " data: " << block[set][way].data << dec << endl; });
-        }*/
+        }
+
 
         int CACHE::check_hit(PACKET *packet)
         {
@@ -3019,7 +3071,66 @@ if((cache_type == IS_L1I || cache_type == IS_L1D) && reads_ready.size() == 0)
             return match_way;
         }
 
-        int CACHE::invalidate_entry(uint64_t inval_addr)
+
+           int CACHE::check_hit_cpu(PACKET *packet,uint8_t cpu)
+        {
+            uint32_t set = get_set_llc(packet->address,cpu);
+            int match_way = -1;
+
+            if (NUM_SET < set) {
+                cerr << "[" << NAME << "_ERROR] " << __func__ << " invalid set index: " << set << " NUM_SET: " << NUM_SET;
+                cerr << " address: " << hex << packet->address << " full_addr: " << packet->full_addr << dec;
+                cerr << " event: " << packet->event_cycle << endl;
+                assert(0);
+            }
+
+            uint64_t packet_tag;
+            if(cache_type == IS_L1I || cache_type == IS_L1D) //@Vishal: VIPT
+            {
+                assert(packet->full_physical_address != 0);
+                packet_tag = packet->full_physical_address >> LOG2_BLOCK_SIZE;
+            }
+            else
+                packet_tag = packet->address;
+
+            // hit
+            uint32_t end=NUM_WAY,begin=0;
+            if(replacement_type==3){
+            end = cpu*NUM_WAY/NUM_CPUS+NUM_WAY/NUM_CPUS;
+            begin=cpu*NUM_WAY/NUM_CPUS;
+            }
+            for (uint32_t way=begin; way<end; way++) {
+                if (block[set][way].valid && (block[set][way].tag == packet_tag)) {
+
+                    match_way = way;
+
+                    DP ( if (warmup_complete[packet->cpu] ) {
+                            cout << "[" << NAME << "] " << __func__ << " instr_id: " << packet->instr_id << " type: " << +packet->type << hex << " addr: " << packet->address;
+                            cout << " full_addr: " << packet->full_addr << " tag: " << block[set][way].tag << " data: " << block[set][way].data << dec;
+                            cout << " set: " << set << " way: " << way << " lru: " << block[set][way].lru;
+                            cout << " event: " << packet->event_cycle << " cycle: " << current_core_cycle[cpu] << endl; });
+
+                    break;
+                }
+            }
+
+
+#ifdef PRINT_QUEUE_TRACE
+            if(packet->instr_id == QTRACE_INSTR_ID)
+            {
+                cout << "[" << NAME << "] " << __func__ << " instr_id: " << packet->instr_id << " type: " << +packet->type << hex << " addr: " << packet->address;
+                cout << " full_addr: " << packet->full_addr<<dec;
+                cout << " set: " << set << " way: " << match_way;
+                cout << " event: " << packet->event_cycle << " cycle: " << current_core_cycle[cpu]<<" cpu: "<<cpu<< endl;
+            }
+#endif
+
+
+
+            return match_way;
+        }
+
+       int CACHE::invalidate_entry(uint64_t inval_addr)
         {
             uint32_t set = get_set(inval_addr);
             int match_way = -1;
@@ -3029,7 +3140,8 @@ if((cache_type == IS_L1I || cache_type == IS_L1D) && reads_ready.size() == 0)
                 cerr << " inval_addr: " << hex << inval_addr << dec << endl;
                 assert(0);
             }
-
+            /*if(cache_type==IS_LLC && replacement_type==4)
+             set=cpu*NUM_SET/NUM_CPUS + set%(NUM_SET/NUM_CPUS);*/
             // invalidate
             for (uint32_t way=0; way<NUM_WAY; way++) {
                 if (block[set][way].valid && (block[set][way].tag == inval_addr)) {
@@ -3049,6 +3161,50 @@ if((cache_type == IS_L1I || cache_type == IS_L1D) && reads_ready.size() == 0)
 
             return match_way;
         }
+
+        int CACHE::invalidate_entry_llc(uint64_t inval_addr,uint8_t cpu)
+        {
+            uint32_t set;
+            if(replacement_type==4 || replacement_type==5) 
+            set=get_set_llc(inval_addr,cpu);
+            else
+            set=get_set(inval_addr);
+            int match_way = -1;
+
+            if (NUM_SET < set) {
+                cerr << "[" << NAME << "_ERROR] " << __func__ << " invalid set index: " << set << " NUM_SET: " << NUM_SET;
+                cerr << " inval_addr: " << hex << inval_addr << dec << endl;
+                assert(0);
+            }
+            /*if(cache_type==IS_LLC && replacement_type==4)
+             set=cpu*NUM_SET/NUM_CPUS + set%(NUM_SET/NUM_CPUS);*/
+            // invalidate
+
+             uint32_t end=NUM_WAY,begin=0;
+            if(replacement_type==3){
+            end = cpu*NUM_WAY/NUM_CPUS+NUM_WAY/NUM_CPUS;
+            begin=cpu*NUM_WAY/NUM_CPUS;
+            }
+
+            for (uint32_t way=begin; way<end; way++) {
+                if (block[set][way].valid && (block[set][way].tag == inval_addr)) {
+
+                    block[set][way].valid = 0;
+
+                    match_way = way;
+
+                    DP ( if (warmup_complete[cpu] ) {
+                            cout << "[" << NAME << "] " << __func__ << " inval_addr: " << hex << inval_addr;  
+                            cout << " tag: " << block[set][way].tag << " data: " << block[set][way].data << dec;
+                            cout << " set: " << set << " way: " << way << " lru: " << block[set][way].lru << " cycle: " << current_core_cycle[cpu] << endl; });
+
+                    break;
+                }
+            }
+
+            return match_way;
+        }
+
 
         void CACHE::flush_TLB()
         {

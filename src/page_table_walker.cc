@@ -514,6 +514,9 @@ uint64_t PAGE_TABLE_WALKER :: va_to_pa_ptw(uint8_t cpu, uint64_t instr_id, bool 
                 ooo_cpu[cpu].L1I.invalidate_entry(cl_addr);
                 ooo_cpu[cpu].L1D.invalidate_entry(cl_addr);
                 ooo_cpu[cpu].L2C.invalidate_entry(cl_addr);
+                if(uncore.LLC.cache_type==IS_LLC && ( uncore.LLC.replacement_type==4 || uncore.LLC.replacement_type==3 || uncore.LLC.replacement_type==5))
+                uncore.LLC.invalidate_entry_llc(cl_addr,cpu);
+                else
                 uncore.LLC.invalidate_entry(cl_addr);
             }
 

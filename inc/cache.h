@@ -118,6 +118,11 @@ class CACHE : public MEMORY {
     uint32_t MAX_READ, MAX_FILL;
     uint32_t reads_available_this_cycle;
     uint8_t cache_type;
+    int* set_map[NUM_CPUS];
+    int set_length[NUM_CPUS];
+    int events;
+    int replacement_type;
+    uint64_t last_detection_cycle;
 
     // prefetch stats
     uint64_t pf_requested,
@@ -189,6 +194,15 @@ class CACHE : public MEMORY {
 
         LATENCY = 0;
 
+        events=0;
+        for(int i=0;i<NUM_CPUS;i++){
+            set_map[i]=(int*)malloc(NUM_SET*sizeof(int));        
+            
+        }
+
+
+        replacement_type=0;
+
         // cache block
         block = new BLOCK* [NUM_SET];
         for (uint32_t i=0; i<NUM_SET; i++) {
@@ -202,6 +216,7 @@ class CACHE : public MEMORY {
         for (uint32_t i=0; i<NUM_CPUS; i++) {
             upper_level_icache[i] = NULL;
             upper_level_dcache[i] = NULL;
+            set_length[i]=NUM_SET/NUM_CPUS;
 
             for (uint32_t j=0; j<NUM_TYPES; j++) {
                 sim_access[i][j] = 0;
@@ -305,7 +320,9 @@ class CACHE : public MEMORY {
              get_size(uint8_t queue_type, uint64_t address);
 
     int  check_hit(PACKET *packet),
+         check_hit_cpu(PACKET *packet,uint8_t cpu),
          invalidate_entry(uint64_t inval_addr),
+         invalidate_entry_llc(uint64_t inval_addr,uint8_t cpu),
          check_mshr(PACKET *packet),
          prefetch_line(uint64_t ip, uint64_t base_addr, uint64_t pf_addr, int prefetch_fill_level, uint32_t prefetch_metadata)/* Neelu: commenting, uint64_t prefetch_id)*/,
          kpc_prefetch_line(uint64_t base_addr, uint64_t pf_addr, int prefetch_fill_level, int delta, int depth, int signature, int confidence, uint32_t prefetch_metadata),
@@ -408,6 +425,7 @@ class CACHE : public MEMORY {
     
     uint32_t get_set(uint64_t address),
              get_way(uint64_t address, uint32_t set),
+             get_set_llc(uint64_t address,uint8_t cpu),
 
 
              (CACHE::*find_victim)(uint32_t cpu, uint64_t instr_id, uint32_t set, const BLOCK *current_set, uint64_t ip, uint64_t full_addr, uint32_t type),

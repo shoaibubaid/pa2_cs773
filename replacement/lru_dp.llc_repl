@@ -6,7 +6,7 @@
 void CACHE::llc_initialize_replacement()
 {
 	cout << NAME << " has LRU replacement policy" << endl;
-    replacement_type=4;
+    replacement_type=5;
 }
 
 // find replacement victim
