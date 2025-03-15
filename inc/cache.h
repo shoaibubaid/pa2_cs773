@@ -120,7 +120,8 @@ class CACHE : public MEMORY {
     uint8_t cache_type;
     int* set_map[NUM_CPUS];
     int set_length[NUM_CPUS];
-    int events;
+    int last_length[NUM_CPUS];
+    int events[NUM_CPUS];
     int replacement_type;
     uint64_t last_detection_cycle;
 
@@ -195,10 +196,10 @@ class CACHE : public MEMORY {
         LATENCY = 0;
 
         events=0;
-        for(int i=0;i<NUM_CPUS;i++){
+        /*for(int i=0;i<NUM_CPUS;i++){
             set_map[i]=(int*)malloc(NUM_SET*sizeof(int));        
             
-        }
+        }*/
 
 
         replacement_type=0;
@@ -217,7 +218,7 @@ class CACHE : public MEMORY {
             upper_level_icache[i] = NULL;
             upper_level_dcache[i] = NULL;
             set_length[i]=NUM_SET/NUM_CPUS;
-
+            events[i]=0;
             for (uint32_t j=0; j<NUM_TYPES; j++) {
                 sim_access[i][j] = 0;
                 sim_hit[i][j] = 0;

@@ -1708,8 +1708,59 @@ int main(int argc, char** argv)
                 run_simulation = 0;
        
        	}
-
+        int loss_set=0;
         // TODO: should it be backward?
+        if(current_core_cycle[0]-uncore.LLC.last_detection_cycle > 5){
+           if(uncore.LLC.events[0] > uncore.LLC.events[1] && uncore.LLC.set_length[0] > LLC_SET/4){
+                loss_set=0;
+           }
+           else if(uncore.LLC.events[0] < uncore.LLC.events[1] && uncore.LLC.set_length[1] > LLC_SET/4){
+                loss_set=1;
+            }
+            uncore.LLC.last_length[(loss_set+1)%2]=uncore.LLC.set_length[(loss_set+1)%2]
+            uncore.LLC.last_length[loss_set]=uncore.LLC.set_length[loss_set];
+            uncore.LLC.set_length[(loss_set+1)%2]++;
+            uncore.LLC.set_length[loss_set]--;
+
+            BLOCK ** block= uncore.LLC.block;
+            uint8_t  do_fill = 1;
+            for(int way=0;way<uncore.LLC.NUM_WAY;way++)
+                // is this dirty?
+                if (block[loss_set][i].dirty) {
+
+                    // check if the lower level WQ has enough room to keep this writeback request
+                    if (uncore.LLC.lower_level) { 
+                        if (uncore.LLC.lower_level->get_occupancy(2, block[loss_set][way].address) == uncore.LLC.lower_level->get_size(2, block[loss_set][way].address)) {
+
+                            // lower level WQ is full, cannot replace this victim
+                            do_fill = 0;
+                            uncore.LLC.lower_level->increment_WQ_FULL(block[loss_set][way].address);
+                            uncore.LLC.STALL[uncore.LLC.WQ.entry[index].type]++;
+
+                            DP ( if (warmup_complete[block[loss_set][way].cpu] ) {
+                                    cout << "[" << NAME << "] " << __func__ << "do_fill: " << +do_fill;
+                                    cout << " lower level wq is full!" << " fill_addr: " << hex << uncore.LLC.WQ.entry[index].address;
+                                    cout << " victim_addr: " << block[loss_set][way].tag << dec << endl; });
+                        }
+                        else { 
+                            PACKET writeback_packet;
+
+                            writeback_packet.fill_level = uncore.LLC.fill_level << 1;
+                            writeback_packet.cpu = block[loss_set][way].cpu;
+                            writeback_packet.address = block[loss_set][way].address;
+                            writeback_packet.full_addr = block[loss_set][way].full_addr;
+                            writeback_packet.data = block[loss_set][way].data;
+                            writeback_packet.instr_id = uncore.LLC.WQ.entry[index].instr_id;
+                            writeback_packet.ip = 0;
+                            writeback_packet.type = WRITEBACK;
+                            writeback_packet.event_cycle = current_core_cycle[block[loss_set][way].cpu];
+
+                            uncore.LLC.lower_level->add_wq(&writeback_packet);
+                        }
+                    }
+
+           uncore.LLC.last_detection_cycle = current_core_cycle[0];
+        }
         uncore.LLC.operate();
         uncore.DRAM.operate();
     }
