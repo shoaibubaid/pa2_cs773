@@ -775,7 +775,7 @@ if (writeback_cpu == NUM_CPUS)
         set = get_set_llc(WQ.entry[index].address,writeback_cpu);
         else
         set = get_set(WQ.entry[index].address);
-        if(cache_type==IS_LLC && (replacement_type==4 || replacement_type==3 ))
+        if(cache_type==IS_LLC && (replacement_type==4 || replacement_type==3 || replacement_type==5 ))
         way = check_hit_cpu(&WQ.entry[index],writeback_cpu);
        else
         way = check_hit(&WQ.entry[index]);
@@ -877,7 +877,7 @@ if (writeback_cpu == NUM_CPUS)
             WQ.remove_queue(&WQ.entry[index]);
         }
         else { // writeback miss (or RFO miss for L1D)
-
+            events[writeback_cpu]++;
             DP ( if (warmup_complete[writeback_cpu]) {
                     cout << "[" << NAME << "] " << __func__ << " type: " << +WQ.entry[index].type << " miss";
                     cout << " instr_id: " << WQ.entry[index].instr_id << " address: " << hex << WQ.entry[index].address;
@@ -1494,7 +1494,7 @@ if((cache_type == IS_L1I || cache_type == IS_L1D) && reads_ready.size() == 0)
         set = get_set_llc(RQ.entry[index].address,read_cpu);
         else
         set = get_set(RQ.entry[index].address);
-        if(cache_type==IS_LLC && (replacement_type==4 || replacement_type==3))
+        if(cache_type==IS_LLC && (replacement_type==4 || replacement_type==3 || replacement_type==5))
         way = check_hit_cpu(&RQ.entry[index],read_cpu);
        else
         way = check_hit(&RQ.entry[index]);
@@ -1893,7 +1893,7 @@ if((cache_type == IS_L1I || cache_type == IS_L1D) && reads_ready.size() == 0)
                 reads_available_this_cycle--;
             }
                 else { //read miss
-
+                    events[read_cpu]++;
                     DP ( if (warmup_complete[read_cpu] ) {
                             cout << "[" << NAME << "] " << __func__ << " read miss";
                             cout << " instr_id: " << RQ.entry[index].instr_id << " address: " << hex << RQ.entry[index].address;
@@ -2480,7 +2480,7 @@ if((cache_type == IS_L1I || cache_type == IS_L1D) && reads_ready.size() == 0)
         set = get_set_llc(PQ.entry[index].address,prefetch_cpu);
         else
         set = get_set(PQ.entry[index].address);
-        if(cache_type==IS_LLC && (replacement_type==4 || replacement_type==3))
+        if(cache_type==IS_LLC && (replacement_type==4 || replacement_type==3 || replacement_type==5))
         way = check_hit_cpu(&PQ.entry[index],prefetch_cpu);
        else
         way = check_hit(&PQ.entry[index]);
@@ -2892,8 +2892,12 @@ if((cache_type == IS_L1I || cache_type == IS_L1D) && reads_ready.size() == 0)
 
             else
 #endif
-                uint32_t set= (address & ((1 << lg2(NUM_SET)) - 1)); 
+                uint32_t set = (address & ((1 << lg2(NUM_SET)) - 1)); 
+                
+                if(replacement_type==4)
                 return  cpu*NUM_SET/NUM_CPUS + set%(NUM_SET/NUM_CPUS);
+                else
+                cpu*set_length[cpu] + set%set_length[cpu];
         }
 
         uint32_t CACHE::get_way(uint64_t address, uint32_t set)

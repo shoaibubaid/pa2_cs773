@@ -195,7 +195,7 @@ class CACHE : public MEMORY {
 
         LATENCY = 0;
 
-        events=0;
+        //events=0;
         /*for(int i=0;i<NUM_CPUS;i++){
             set_map[i]=(int*)malloc(NUM_SET*sizeof(int));        
             
