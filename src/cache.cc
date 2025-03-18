@@ -769,7 +769,8 @@ if (writeback_cpu == NUM_CPUS)
         int index = WQ.head;
 
         // access cache
-        uint32_t set,way ;
+        uint32_t set;
+        int way ;
         
         if(cache_type==IS_LLC && (replacement_type==4||replacement_type==5))
         set = get_set_llc(WQ.entry[index].address,writeback_cpu);
@@ -987,7 +988,8 @@ if (writeback_cpu == NUM_CPUS)
             }
             else {
                 // find victim
-               uint32_t set,way ;
+               uint32_t set;
+               int way ;
         
         if(cache_type==IS_LLC && (replacement_type==4||replacement_type==5))
             set=get_set_llc(WQ.entry[index].address,writeback_cpu);
@@ -1488,7 +1490,8 @@ if((cache_type == IS_L1I || cache_type == IS_L1D) && reads_ready.size() == 0)
             // access cache
          
 
-             uint32_t set,way ;
+             uint32_t set;
+             int way ;
         
         if(cache_type==IS_LLC && (replacement_type==4 || replacement_type==5))
         set = get_set_llc(RQ.entry[index].address,read_cpu);
@@ -2897,7 +2900,7 @@ if((cache_type == IS_L1I || cache_type == IS_L1D) && reads_ready.size() == 0)
                 if(replacement_type==4)
                 return  cpu*NUM_SET/NUM_CPUS + set%(NUM_SET/NUM_CPUS);
                 else
-                cpu*set_length[cpu] + set%set_length[cpu];
+                return cpu*set_length[cpu] + set%set_length[cpu];
         }
 
         uint32_t CACHE::get_way(uint64_t address, uint32_t set)
@@ -3184,13 +3187,13 @@ if((cache_type == IS_L1I || cache_type == IS_L1D) && reads_ready.size() == 0)
              set=cpu*NUM_SET/NUM_CPUS + set%(NUM_SET/NUM_CPUS);*/
             // invalidate
 
-             uint32_t end=NUM_WAY,begin=0;
+             int end=NUM_WAY,begin=0;
             if(replacement_type==3){
             end = cpu*NUM_WAY/NUM_CPUS+NUM_WAY/NUM_CPUS;
             begin=cpu*NUM_WAY/NUM_CPUS;
             }
 
-            for (uint32_t way=begin; way<end; way++) {
+            for (int way=begin; way<end; way++) {
                 if (block[set][way].valid && (block[set][way].tag == inval_addr)) {
 
                     block[set][way].valid = 0;

@@ -1779,9 +1779,10 @@ int main(int argc, char** argv)
 
                 // is this dirty?
                 
-        uncore.LLC.operate();
-        uncore.DRAM.operate();
+       
     }
+    uncore.LLC.operate();
+    uncore.DRAM.operate();
     }
     uint64_t elapsed_second = (uint64_t)(time(NULL) - start_time),
              elapsed_minute = elapsed_second / 60,
